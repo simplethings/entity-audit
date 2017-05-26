@@ -23,7 +23,6 @@
 
 namespace SimpleThings\EntityAudit\Tests;
 
-use Doctrine\ORM\Mapping as ORM;
 use SimpleThings\EntityAudit\AuditReader;
 use SimpleThings\EntityAudit\ChangedEntity;
 use SimpleThings\EntityAudit\Tests\Fixtures\Relation\CheeseProduct;

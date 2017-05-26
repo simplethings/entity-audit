@@ -24,14 +24,12 @@
 
 namespace SimpleThings\EntityAudit\Tests;
 
-use SimpleThings\EntityAudit\AuditReader;
 use SimpleThings\EntityAudit\Tests\Fixtures\Issue\DuplicateRevisionFailureTestOwnedElement;
 use SimpleThings\EntityAudit\Tests\Fixtures\Issue\DuplicateRevisionFailureTestPrimaryOwner;
 use SimpleThings\EntityAudit\Tests\Fixtures\Issue\DuplicateRevisionFailureTestSecondaryOwner;
 use SimpleThings\EntityAudit\Tests\Fixtures\Issue\EscapedColumnsEntity;
 use SimpleThings\EntityAudit\Tests\Fixtures\Issue\ConvertToPHPEntity;
 use SimpleThings\EntityAudit\Tests\Fixtures\Issue\Issue111Entity;
-use SimpleThings\EntityAudit\Tests\Fixtures\Issue\Issue156Contact;
 use SimpleThings\EntityAudit\Tests\Fixtures\Issue\Issue156ContactTelephoneNumber;
 use SimpleThings\EntityAudit\Tests\Fixtures\Issue\Issue156Client;
 use SimpleThings\EntityAudit\Tests\Fixtures\Issue\Issue194User;
