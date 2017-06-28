@@ -16,7 +16,7 @@
         "gedmo/doctrine-extensions": "^2.3.1",
         "phpunit/phpunit": "^5.5",
         "symfony/var-dumper": "~2.8|~3.0",
-        "friendsofphp/php-cs-fixer": "^1.11"
+        "friendsofphp/php-cs-fixer": "^2.3"
     },
     "conflict": {
         "gedmo/doctrine-extensions": "<2.3.1"

@@ -81,14 +81,14 @@ class AuditedCollection implements Collection
      *
      * @var array
      */
-    protected $entities = array();
+    protected $entities = [];
 
     /**
      * Definition of current association
      *
      * @var array
      */
-    protected $associationDefinition = array();
+    protected $associationDefinition = [];
 
     /**
      * @var bool
@@ -131,7 +131,7 @@ class AuditedCollection implements Collection
      */
     public function clear()
     {
-        $this->entities = array();
+        $this->entities = [];
         $this->initialized = false;
     }
 
@@ -336,7 +336,7 @@ class AuditedCollection implements Collection
     {
         $this->forceLoad();
 
-        $true = $false = array();
+        $true = $false = [];
 
         foreach ($this->entities as $entity) {
             if ($p($entity)) {
@@ -346,7 +346,7 @@ class AuditedCollection implements Collection
             }
         }
 
-        return array($true, $false);
+        return [$true, $false];
     }
 
     /**
@@ -508,7 +508,7 @@ class AuditedCollection implements Collection
         $rows = $queryBuilder->execute()->fetchAll();
 
         foreach ($rows as $row) {
-            $entity = array('rev' => $row['rev']);
+            $entity = ['rev' => $row['rev']];
             unset($row['rev']);
 
             $entity['keys'] = $row;
@@ -555,7 +555,7 @@ class AuditedCollection implements Collection
         }
 
         //master entity query, not equals
-        $notEqualParts = $nullParts = array();
+        $notEqualParts = $nullParts = [];
         foreach ($this->foreignKeys as $column => $value) {
             $notEqualParts[] = $column . ' <> ' . $parentQueryBuilder->createPositionalParameter($value);
             $nullParts[] = $column . ' IS NULL';
