@@ -31,7 +31,8 @@ $finder = PhpCsFixer\Finder::create()
 return PhpCsFixer\Config::create()
     ->setRules([
         '@PSR2' => true,
-        //'strict_param' => true,
+        'declare_strict_types' => true,
+        'single_blank_line_before_namespace' => true,
         'array_syntax' => ['syntax' => 'short'],
     ])
     ->setFinder($finder)
