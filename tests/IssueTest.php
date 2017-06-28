@@ -24,6 +24,7 @@
 
 namespace SimpleThings\EntityAudit\Tests;
 
+use Gedmo\SoftDeleteable\SoftDeleteableListener;
 use SimpleThings\EntityAudit\Tests\Fixtures\Issue\DuplicateRevisionFailureTestOwnedElement;
 use SimpleThings\EntityAudit\Tests\Fixtures\Issue\DuplicateRevisionFailureTestPrimaryOwner;
 use SimpleThings\EntityAudit\Tests\Fixtures\Issue\DuplicateRevisionFailureTestSecondaryOwner;
@@ -44,14 +45,16 @@ use SimpleThings\EntityAudit\Tests\Fixtures\Issue\Issue9Address;
 use SimpleThings\EntityAudit\Tests\Fixtures\Issue\Issue9Customer;
 use SimpleThings\EntityAudit\Tests\Fixtures\Issue\Issue198Owner;
 use SimpleThings\EntityAudit\Tests\Fixtures\Issue\Issue198Car;
+use SimpleThings\EntityAudit\Tests\Types\ConvertToPHPType;
+use SimpleThings\EntityAudit\Tests\Types\Issue196Type;
 
 class IssueTest extends BaseTest
 {
     protected $fixturesPath = __DIR__ . '/Fixtures/Issue';
 
     protected $customTypes = [
-        'issue196type' => 'SimpleThings\EntityAudit\Tests\Types\Issue196Type',
-        'upper' => 'SimpleThings\EntityAudit\Tests\Types\ConvertToPHPType',
+        'issue196type' => Issue196Type::class,
+        'upper' => ConvertToPHPType::class,
     ];
 
     public function testIssue31()
@@ -75,7 +78,7 @@ class IssueTest extends BaseTest
 
     public function testIssue111()
     {
-        $this->em->getEventManager()->addEventSubscriber(new \Gedmo\SoftDeleteable\SoftDeleteableListener());
+        $this->em->getEventManager()->addEventSubscriber(new SoftDeleteableListener());
 
         $e = new Issue111Entity();
         $e->setStatus('test status');
@@ -86,7 +89,7 @@ class IssueTest extends BaseTest
         $this->em->remove($e);
         $this->em->flush(); //#2
 
-        $reader = $this->auditManager->createAuditReader($this->em);
+        $reader = $this->auditManager->createAuditReader();
 
         $ae = $reader->find('SimpleThings\EntityAudit\Tests\Fixtures\Issue\Issue111Entity', 1, 2);
 
@@ -101,7 +104,7 @@ class IssueTest extends BaseTest
         $this->em->persist($e);
         $this->em->flush();
 
-        $reader = $this->auditManager->createAuditReader($this->em);
+        $reader = $this->auditManager->createAuditReader();
 
         $reader->find(get_class($e), $e->getId(), 1);
     }
@@ -122,7 +125,7 @@ class IssueTest extends BaseTest
         $this->em->persist($comment);
         $this->em->flush();
 
-        $auditReader = $this->auditManager->createAuditReader($this->em);
+        $auditReader = $this->auditManager->createAuditReader();
 
         $auditedProject = $auditReader->find(get_class($project), $project->getId(), 1);
 
@@ -156,7 +159,7 @@ class IssueTest extends BaseTest
 
         $this->em->flush(); //#1
 
-        $reader = $this->auditManager->createAuditReader($this->em);
+        $reader = $this->auditManager->createAuditReader();
 
         $aAddress = $reader->find(get_class($address), $address->getId(), 1);
         $this->assertEquals($customer->getId(), $aAddress->getCustomer()->getId());
@@ -206,7 +209,7 @@ class IssueTest extends BaseTest
         $this->em->persist($number);
         $this->em->flush();
 
-        $auditReader = $this->auditManager->createAuditReader($this->em);
+        $auditReader = $this->auditManager->createAuditReader();
         $object = $auditReader->find(get_class($number), $number->getId(), 1);
     }
 
@@ -220,7 +223,7 @@ class IssueTest extends BaseTest
         $this->em->persist($address);
         $this->em->flush();
 
-        $auditReader = $this->auditManager->createAuditReader($this->em);
+        $auditReader = $this->auditManager->createAuditReader();
         $auditUser = $auditReader->find(get_class($user), $user->getId(), 1);
         $auditAddress = $auditReader->find(get_class($address), $address->getUser()->getId(), 2);
         $this->assertEquals($auditAddress->getUser(), $auditUser);
@@ -238,7 +241,7 @@ class IssueTest extends BaseTest
 
         $persistedEntity = $this->em->find(get_class($entity), $entity->getId());
 
-        $auditReader = $this->auditManager->createAuditReader($this->em);
+        $auditReader = $this->auditManager->createAuditReader();
         $currentRevision = $auditReader->getCurrentRevision(get_class($entity), $entity->getId());
         $currentRevisionEntity = $auditReader->find(get_class($entity), $entity->getId(), $currentRevision);
 
@@ -264,7 +267,7 @@ class IssueTest extends BaseTest
         $this->em->persist($car);
         $this->em->flush();
 
-        $auditReader = $this->auditManager->createAuditReader($this->em);
+        $auditReader = $this->auditManager->createAuditReader();
         
         $car1 = $auditReader->find(get_class($car), $car->getId(), 1);
         $this->assertNull($car1->getOwner());
@@ -283,7 +286,7 @@ class IssueTest extends BaseTest
 
         $persistedEntity = $this->em->find(get_class($entity), $entity->getId());
 
-        $auditReader = $this->auditManager->createAuditReader($this->em);
+        $auditReader = $this->auditManager->createAuditReader();
         $currentRevision = $auditReader->getCurrentRevision(get_class($entity), $entity->getId());
         $currentRevisionEntity = $auditReader->find(get_class($entity), $entity->getId(), $currentRevision);
 

@@ -30,7 +30,6 @@ use Doctrine\DBAL\Query\QueryBuilder;
 use Doctrine\DBAL\Types\Type;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Mapping\ClassMetadata;
-use Doctrine\ORM\Mapping\ClassMetadataInfo;
 use Doctrine\ORM\Mapping\QuoteStrategy;
 use Doctrine\ORM\Query;
 use SimpleThings\EntityAudit\Exception\DeletedException;
@@ -152,7 +151,6 @@ class AuditReader
             throw new NotAuditedException($className);
         }
 
-        /** @var ClassMetadataInfo|ClassMetadata $class */
         $class = $this->em->getClassMetadata($className);
         $connection = $this->getConnection();
 
@@ -202,7 +200,6 @@ class AuditReader
         }
 
         if ($class->isInheritanceTypeJoined() && $class->name != $class->rootEntityName) {
-            /** @var ClassMetadataInfo|ClassMetadata $rootClass */
             $rootClass = $this->em->getClassMetadata($class->rootEntityName);
             $rootTableName = $this->config->getTableName($rootClass);
 
@@ -295,7 +292,6 @@ class AuditReader
 
         $changedEntities = [];
         foreach ($auditedEntities as $className) {
-            /** @var ClassMetadataInfo|ClassMetadata $class */
             $class = $this->em->getClassMetadata($className);
 
             if ($class->isInheritanceTypeSingleTable() && count($class->subClasses) > 0) {
@@ -336,7 +332,6 @@ class AuditReader
                     )
                 );
             } elseif ($class->isInheritanceTypeJoined() && $class->name !== $class->rootEntityName) {
-                /** @var ClassMetadataInfo|ClassMetadata $rootClass */
                 $rootClass = $this->em->getClassMetadata($class->rootEntityName);
                 $rootTableName = $this->config->getTableName($rootClass);
 
@@ -411,7 +406,6 @@ class AuditReader
             throw new NotAuditedException($className);
         }
 
-        /** @var ClassMetadataInfo|ClassMetadata $class */
         $class = $this->em->getClassMetadata($className);
 
         $connection = $this->getConnection();
@@ -453,7 +447,6 @@ class AuditReader
             throw new NotAuditedException($className);
         }
 
-        /** @var ClassMetadataInfo|ClassMetadata $class */
         $class = $this->em->getClassMetadata($className);
 
         $queryBuilder = $this->getConnection()->createQueryBuilder()
@@ -487,28 +480,19 @@ class AuditReader
         $oldObject = $this->find($className, $id, $oldRevision);
         $newObject = $this->find($className, $id, $newRevision);
 
-        $oldValues = $this->getEntityValues($className, $oldObject);
-        $newValues = $this->getEntityValues($className, $newObject);
+        $metadata = $this->metadataFactory->getMetadataFor($className);
 
-        $diff = [];
-
-        $metadataFactory = $this->em->getMetadataFactory();
-        $valueToCompare = function ($value) use ($metadataFactory) {
-            // If the value is an associated entity, we have to compare the identifiers.
-            if (is_object($value) && $metadataFactory->hasMetadataFor(ClassUtils::getClass($value))) {
-                return $metadataFactory->getMetadataFor(ClassUtils::getClass($value))
-                    ->getIdentifierValues($value);
-            }
-
-            return $value;
-        };
+        $oldValues = $metadata->getEntityValues($oldObject);
+        $newValues = $metadata->getEntityValues($newObject);
 
         $keys = array_keys(array_merge($oldValues, $newValues));
-        foreach ($keys as $field) {
-            $old = array_key_exists($field, $oldValues) ? $oldValues[$field] : null;
-            $new = array_key_exists($field, $newValues) ? $newValues[$field] : null;
+        $diff = [];
 
-            if ($valueToCompare($old) == $valueToCompare($new)) {
+        foreach ($keys as $field) {
+            $old = $oldValues[$field] ?? null;
+            $new = $newValues[$field] ?? null;
+
+            if ($this->getValueToCompare($old) === $this->getValueToCompare($new)) {
                 $row = ['old' => '', 'new' => '', 'same' => $old];
             } else {
                 $row = ['old' => $old, 'new' => $new, 'same' => ''];
@@ -520,35 +504,17 @@ class AuditReader
         return $diff;
     }
 
-    /**
-     * Get the values for a specific entity as an associative array
-     *
-     * @param string $className
-     * @param object $entity
-     *
-     * @return array
-     */
-    public function getEntityValues(string $className, $entity): array
+    private function getValueToCompare($value)
     {
-        /** @var ClassMetadataInfo|ClassMetadata $metadata */
-        $metadata = $this->em->getClassMetadata($className);
+        $metadataFactory = $this->em->getMetadataFactory();
 
-        $values = [];
-
-        // Fetch simple fields values
-        foreach ($metadata->getFieldNames() as $fieldName) {
-            $values[$fieldName] = $metadata->getFieldValue($entity, $fieldName);
+        // If the value is an associated entity, we have to compare the identifiers.
+        if (is_object($value) && $metadataFactory->hasMetadataFor(ClassUtils::getClass($value))) {
+            return $metadataFactory->getMetadataFor(ClassUtils::getClass($value))
+                ->getIdentifierValues($value);
         }
 
-        // Fetch associations identifiers values
-        foreach ($metadata->getAssociationNames() as $associationName) {
-            // Do not get OneToMany or ManyToMany collections because not relevant to the revision.
-            if ($metadata->getAssociationMapping($associationName)['isOwningSide']) {
-                $values[$associationName] = $metadata->getFieldValue($entity, $associationName);
-            }
-        }
-
-        return $values;
+        return $value;
     }
 
     /**
@@ -565,7 +531,6 @@ class AuditReader
             throw new NotAuditedException($className);
         }
 
-        /** @var ClassMetadataInfo|ClassMetadata $class */
         $class = $this->em->getClassMetadata($className);
 
         $revisionFieldName = $this->config->getRevisionFieldName();
@@ -613,7 +578,7 @@ class AuditReader
         return $result;
     }
 
-    private function prepareWhereStatement($id, QueryBuilder $queryBuilder, ClassMetadataInfo $class)
+    private function prepareWhereStatement($id, QueryBuilder $queryBuilder, ClassMetadata $class)
     {
         if (!is_array($id)) {
             $id = [$class->identifier[0] => $id];
@@ -624,7 +589,11 @@ class AuditReader
         foreach ($class->identifier as $idField) {
             if (isset($class->fieldMappings[$idField])) {
                 $queryBuilder->andWhere(sprintf('e.%s = ?', $class->fieldMappings[$idField]['columnName']));
-            } elseif (isset($class->associationMappings[$idField])) {
+
+                continue;
+            }
+
+            if (isset($class->associationMappings[$idField])) {
                 $queryBuilder->andWhere(
                     sprintf(
                         'e.%s = ?',
@@ -635,7 +604,7 @@ class AuditReader
         }
     }
 
-    private function prepareSelects(QueryBuilder $queryBuilder, ClassMetadataInfo $class)
+    private function prepareSelects(QueryBuilder $queryBuilder, ClassMetadata $class)
     {
         foreach ($class->fieldNames as $columnName => $field) {
             $tableAlias = $class->isInheritanceTypeJoined()
@@ -645,6 +614,7 @@ class AuditReader
                 : 'e';
 
             $type = Type::getType($class->fieldMappings[$field]['type']);
+
             $queryBuilder->addSelect(
                 sprintf(
                     '%s AS %s',
@@ -658,7 +628,7 @@ class AuditReader
         }
     }
 
-    private function createColumnMap(ClassMetadataInfo $class): array
+    private function createColumnMap(ClassMetadata $class): array
     {
         $columnMap = [];
 

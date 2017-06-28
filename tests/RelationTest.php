@@ -109,7 +109,7 @@ class RelationTest extends BaseTest
 
     public function testIssue92()
     {
-        $auditReader = $this->auditManager->createAuditReader($this->em);
+        $auditReader = $this->auditManager->createAuditReader();
 
         $owner1 = new OwnerEntity();
         $owner1->setTitle('test');
@@ -238,7 +238,7 @@ class RelationTest extends BaseTest
      */
     public function testManyToMany()
     {
-        $auditReader = $this->auditManager->createAuditReader($this->em);
+        $auditReader = $this->auditManager->createAuditReader();
 
         $owner = new OwnerEntity();
         $owner->setTitle('owner#1');
@@ -422,7 +422,7 @@ class RelationTest extends BaseTest
      */
     public function testRemoval()
     {
-        $auditReader = $this->auditManager->createAuditReader($this->em);
+        $auditReader = $this->auditManager->createAuditReader();
 
         $owner1 = new OwnerEntity();
         $owner1->setTitle('owner1');
@@ -489,7 +489,7 @@ class RelationTest extends BaseTest
      */
     public function testDetaching()
     {
-        $auditReader = $this->auditManager->createAuditReader($this->em);
+        $auditReader = $this->auditManager->createAuditReader();
 
         $owner = new OwnerEntity();
         $owner->setTitle('created#1');
@@ -565,7 +565,7 @@ class RelationTest extends BaseTest
 
     public function testOneXRelations()
     {
-        $auditReader = $this->auditManager->createAuditReader($this->em);
+        $auditReader = $this->auditManager->createAuditReader();
 
         $owner = new OwnerEntity();
         $owner->setTitle('owner');
@@ -616,7 +616,7 @@ class RelationTest extends BaseTest
 
         $this->em->flush();
 
-        $reader = $this->auditManager->createAuditReader($this->em);
+        $reader = $this->auditManager->createAuditReader();
 
         $auditedFood = $reader->find(
             get_class($food),
@@ -653,7 +653,7 @@ class RelationTest extends BaseTest
 
         $this->em->flush();
 
-        $reader = $this->auditManager->createAuditReader($this->em);
+        $reader = $this->auditManager->createAuditReader();
 
         $auditedPage = $reader->find(
             get_class($page),
@@ -714,7 +714,7 @@ class RelationTest extends BaseTest
 
         $this->em->flush(); //#3
 
-        $reader = $this->auditManager->createAuditReader($this->em);
+        $reader = $this->auditManager->createAuditReader();
 
         $auditedOwner = $reader->find(
             get_class($owner),
@@ -750,7 +750,7 @@ class RelationTest extends BaseTest
 
         $this->em->flush();
 
-        $reader = $this->auditManager->createAuditReader($this->em);
+        $reader = $this->auditManager->createAuditReader();
 
         $auditedBase = $reader->find(get_class($base), $base->getId(), 1);
 
@@ -801,7 +801,7 @@ class RelationTest extends BaseTest
         $this->em->persist($container3);
         $this->em->flush();
 
-        $reader = $this->auditManager->createAuditReader($this->em);
+        $reader = $this->auditManager->createAuditReader();
 
         $legal2Base = $reader->find(get_class($legal2), $legal2->getId(), 1);
 
@@ -827,7 +827,7 @@ class RelationTest extends BaseTest
         $this->em->persist($owned);
         $this->em->flush();
 
-        $reader = $this->auditManager->createAuditReader($this->em);
+        $reader = $this->auditManager->createAuditReader();
         $diff = $reader->diff(get_class($owned), 1, 1, 2);
 
         $this->assertSame($owner1->getTitle(), $diff['owner']['old']->getTitle());
@@ -837,7 +837,7 @@ class RelationTest extends BaseTest
 
     public function testDoubleFieldDefinitionEdgeCase()
     {
-        $reader = $this->auditManager->createAuditReader($this->em);
+        $reader = $this->auditManager->createAuditReader();
 
         $owner = new ChildEntity();
         $owned = new RelatedEntity();
