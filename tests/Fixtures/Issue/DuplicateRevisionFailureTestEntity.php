@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 namespace SimpleThings\EntityAudit\Tests\Fixtures\Issue;
 
@@ -21,4 +21,3 @@ abstract class DuplicateRevisionFailureTestEntity
         return $this->id;
     }
 }
-

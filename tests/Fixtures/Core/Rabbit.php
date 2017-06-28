@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 namespace SimpleThings\EntityAudit\Tests\Fixtures\Core;
 
@@ -14,7 +14,7 @@ class Rabbit extends AnimalAudit
     /** @ORM\Column(type="string", name="cute_rabbit_color") */
     private $color;
 
-    function __construct($name, $color)
+    public function __construct($name, $color)
     {
         $this->color = $color;
         parent::__construct($name);

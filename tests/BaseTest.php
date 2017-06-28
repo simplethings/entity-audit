@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /*
  * (c) 2011 SimpleThings GmbH
  *
@@ -92,9 +92,9 @@ abstract class BaseTest extends \PHPUnit_Framework_TestCase
         $config->setAutoGenerateProxyClasses(ProxyFactory::AUTOGENERATE_EVAL);
         $config->setProxyNamespace('SimpleThings\EntityAudit\Tests\Proxies');
 
-        $config->setMetadataDriverImpl($config->newDefaultAnnotationDriver(array(
+        $config->setMetadataDriverImpl($config->newDefaultAnnotationDriver([
             $this->fixturesPath
-        ), false));
+        ], false));
 
         Gedmo\DoctrineExtensions::registerAnnotations();
 
@@ -104,7 +104,7 @@ abstract class BaseTest extends \PHPUnit_Framework_TestCase
         $evm = $connection->getEventManager();
         foreach ($evm->getListeners() as $event => $listeners) {
             foreach ($listeners as $listener) {
-                $evm->removeEventListener(array($event), $listener);
+                $evm->removeEventListener([$event], $listener);
             }
         }
 
@@ -140,22 +140,22 @@ abstract class BaseTest extends \PHPUnit_Framework_TestCase
     protected function _getConnection()
     {
         if (!isset(self::$conn)) {
-            if(isset(
+            if (isset(
                 $GLOBALS['db_type'],
                 $GLOBALS['db_username'],
                 $GLOBALS['db_password'],
                 $GLOBALS['db_host'],
                 $GLOBALS['db_name'],
                 $GLOBALS['db_port']
-            )){
-                $params = array(
+            )) {
+                $params = [
                     'driver' => $GLOBALS['db_type'],
                     'user' => $GLOBALS['db_username'],
                     'password' => $GLOBALS['db_password'],
                     'host' => $GLOBALS['db_host'],
                     'dbname' => $GLOBALS['db_name'],
                     'port' => $GLOBALS['db_port'],
-                );
+                ];
 
                 $tmpParams = $params;
                 $dbname = $params['dbname'];
@@ -176,12 +176,11 @@ abstract class BaseTest extends \PHPUnit_Framework_TestCase
                 }
 
                 $conn->close();
-
             } else {
-                $params = array(
+                $params = [
                     'driver' => 'pdo_sqlite',
                     'memory' => true,
-                );
+                ];
             }
 
             self::$conn = DriverManager::getConnection($params);

@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 namespace SimpleThings\EntityAudit\Tests\Fixtures\Relation;
 
@@ -9,6 +9,6 @@ use SimpleThings\EntityAudit\Mapping\Annotation\Auditable;
  * @Auditable()
  * @ORM\Entity
  */
-class CheeseProduct extends Product {}
-
-
+class CheeseProduct extends Product
+{
+}

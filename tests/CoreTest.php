@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /*
  * (c) 2011 SimpleThings GmbH
  *
@@ -193,7 +193,7 @@ class CoreTest extends BaseTest
         //duplicated entries means a bug with discriminators
         $this->assertEquals(6, count($changedEntities));
 
-        usort($changedEntities, function(ChangedEntity $a, ChangedEntity $b) {
+        usort($changedEntities, function (ChangedEntity $a, ChangedEntity $b) {
             return strcmp($a->getClassName(), $b->getClassName());
         });
 
@@ -201,12 +201,12 @@ class CoreTest extends BaseTest
 
         $this->assertEquals('SimpleThings\EntityAudit\Tests\Fixtures\Core\ArticleAudit', $changedEntities[0]->getClassName());
         $this->assertEquals('INS', $changedEntities[0]->getRevisionType());
-        $this->assertEquals(array('id' => 1), $changedEntities[0]->getId());
+        $this->assertEquals(['id' => 1], $changedEntities[0]->getId());
         $this->assertInstanceOf('SimpleThings\EntityAudit\Tests\Fixtures\Core\ArticleAudit', $changedEntities[0]->getEntity());
 
         $this->assertEquals('SimpleThings\EntityAudit\Tests\Fixtures\Core\UserAudit', $changedEntities[5]->getClassName());
         $this->assertEquals('INS', $changedEntities[5]->getRevisionType());
-        $this->assertEquals(array('id' => 1), $changedEntities[5]->getId());
+        $this->assertEquals(['id' => 1], $changedEntities[5]->getId());
         $this->assertInstanceOf('SimpleThings\EntityAudit\Tests\Fixtures\Core\UserAudit', $changedEntities[5]->getEntity());
     }
 
@@ -215,10 +215,10 @@ class CoreTest extends BaseTest
         // Insert user without the manager to skip revision registering.
         $this->em->getConnection()->insert(
             $this->em->getClassMetadata('SimpleThings\EntityAudit\Tests\Fixtures\Core\UserAudit')->getTableName(),
-            array(
+            [
                 'id' => 1,
                 'name' => 'beberlei',
-            )
+            ]
         );
 
         $article = new ArticleAudit(
@@ -246,11 +246,11 @@ class CoreTest extends BaseTest
         // Insert user without the manager to skip revision registering.
         $this->em->getConnection()->insert(
             $this->em->getClassMetadata('SimpleThings\EntityAudit\Tests\Fixtures\Core\ProfileAudit')->getTableName(),
-            array(
+            [
                 'id' => 1,
                 'biography' => 'He is an amazing contributor!',
                 'user_id' => 1,
-            )
+            ]
         );
 
         $reader = $this->auditManager->createAuditReader($this->em);
@@ -369,7 +369,7 @@ class CoreTest extends BaseTest
         $this->assertContainsOnly('SimpleThings\EntityAudit\ChangedEntity', $changedEntities);
         $this->assertEquals('SimpleThings\EntityAudit\Tests\Fixtures\Core\UserAudit', $changedEntities[0]->getClassName());
         $this->assertEquals('DEL', $changedEntities[0]->getRevisionType());
-        $this->assertEquals(array('id' => 1), $changedEntities[0]->getId());
+        $this->assertEquals(['id' => 1], $changedEntities[0]->getId());
     }
 
     public function testUsernameResolvingIsDynamic()

@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /*
  * (c) 2011 SimpleThings GmbH
  *
@@ -85,7 +85,7 @@ class RelationTest extends BaseTest
         $this->assertEquals(2, count($changedEntities));
         $this->assertContainsOnly('SimpleThings\EntityAudit\ChangedEntity', $changedEntities);
 
-        usort($changedEntities, function(ChangedEntity $a, ChangedEntity $b) {
+        usort($changedEntities, function (ChangedEntity $a, ChangedEntity $b) {
             return strcmp($a->getClassName(), $b->getClassName());
         });
 
@@ -99,8 +99,8 @@ class RelationTest extends BaseTest
         $this->assertEquals('SimpleThings\EntityAudit\Tests\Fixtures\Relation\OwnedEntity1', get_class($changedOwned));
         $this->assertEquals('DEL', $changedEntities[0]->getRevisionType());
         $this->assertEquals('DEL', $changedEntities[1]->getRevisionType());
-        $this->assertEquals(array('id' => 1), $changedEntities[0]->getId());
-        $this->assertEquals(array('id' => 1), $changedEntities[1]->getId());
+        $this->assertEquals(['id' => 1], $changedEntities[0]->getId());
+        $this->assertEquals(['id' => 1], $changedEntities[1]->getId());
         //uninit proxy messes up ids, it is fine
         $this->assertCount(0, $changedOwner->getOwned1());
         $this->assertCount(0, $changedOwner->getOwned2());
@@ -724,7 +724,7 @@ class RelationTest extends BaseTest
 
         $this->assertCount(3, $auditedOwner->getOwned1());
 
-        $ids = array();
+        $ids = [];
         foreach ($auditedOwner->getOwned1() as $ownedElement) {
             $ids[] = $ownedElement->getId();
         }
