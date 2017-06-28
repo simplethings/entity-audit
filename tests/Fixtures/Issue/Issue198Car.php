@@ -1,4 +1,5 @@
-<?php
+<?php declare(strict_types=1);
+
 namespace SimpleThings\EntityAudit\Tests\Fixtures\Issue;
 
 use Doctrine\ORM\Mapping as ORM;

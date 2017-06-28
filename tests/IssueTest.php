@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 /*
  * (c) 2011 SimpleThings GmbH
  *
@@ -49,10 +49,10 @@ class IssueTest extends BaseTest
 {
     protected $fixturesPath = __DIR__ . '/Fixtures/Issue';
 
-    protected $customTypes = array(
+    protected $customTypes = [
         'issue196type' => 'SimpleThings\EntityAudit\Tests\Types\Issue196Type',
         'upper' => 'SimpleThings\EntityAudit\Tests\Types\ConvertToPHPType',
-    );
+    ];
 
     public function testIssue31()
     {
@@ -138,7 +138,6 @@ class IssueTest extends BaseTest
 
         $auditedComment = $auditReader->find(get_class($comment), $comment->getId(), 2);
         $this->assertEquals('changed project title', $auditedComment->getProject()->getTitle());
-
     }
 
     public function testIssue9()
@@ -147,7 +146,7 @@ class IssueTest extends BaseTest
         $address->setAddressText('NY, Red Street 6');
 
         $customer = new Issue9Customer();
-        $customer->setAddresses(array($address));
+        $customer->setAddresses([$address]);
         $customer->setPrimaryAddress($address);
 
         $address->setCustomer($customer);

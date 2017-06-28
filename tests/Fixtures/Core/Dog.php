@@ -1,4 +1,4 @@
-<?php
+<?php declare(strict_types=1);
 
 namespace SimpleThings\EntityAudit\Tests\Fixtures\Core;
 
@@ -14,7 +14,7 @@ class Dog extends PetAudit
     /** @ORM\Column(type="integer", name="dog_tail_length") */
     private $tailLength;
 
-    function __construct($name, $tailLength)
+    public function __construct($name, $tailLength)
     {
         $this->tailLength = $tailLength;
         parent::__construct($name);
