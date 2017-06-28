@@ -155,9 +155,9 @@ class AuditReader
      * @throws NotAuditedException
      * @throws \Doctrine\DBAL\DBALException
      */
-    public function find($className, $id, $revision, array $options = array())
+    public function find($className, $id, $revision, array $options = [])
     {
-        $options = array_merge(array('threatDeletionsAsExceptions' => false), $options);
+        $options = array_merge(['threatDeletionsAsExceptions' => false], $options);
 
         if (! $this->metadataFactory->isAudited($className)) {
             throw new NotAuditedException($className);
@@ -171,7 +171,7 @@ class AuditReader
         $queryBuilder->from($tableName = $this->config->getTableName($class), 'e');
         $queryBuilder->where(sprintf('e.%s <= ?', $this->config->getRevisionFieldName()));
 
-        foreach ($class->identifier AS $idField) {
+        foreach ($class->identifier as $idField) {
             if (is_array($id) && count($id) > 0) {
                 $idKeys = array_keys($id);
                 $columnName = $idKeys[0];
@@ -187,11 +187,11 @@ class AuditReader
         }
 
         if (! is_array($id)) {
-            $id = array($class->identifier[0] => $id);
+            $id = [$class->identifier[0] => $id];
         }
 
         $queryBuilder->addSelect('e.' . $this->config->getRevisionTypeFieldName());
-        $columnMap = array();
+        $columnMap = [];
 
         foreach ($class->fieldNames as $columnName => $field) {
             $tableAlias = $class->isInheritanceTypeJoined() && $class->isInheritedField($field) && ! $class->isIdentifier($field)
@@ -210,7 +210,7 @@ class AuditReader
             $columnMap[$field] = $this->platform->getSQLResultCasing($columnName);
         }
 
-        foreach ($class->associationMappings AS $assoc) {
+        foreach ($class->associationMappings as $assoc) {
             if (($assoc['type'] & ClassMetadata::TO_ONE) == 0 || ! $assoc['isOwningSide']) {
                 continue;
             }
@@ -246,7 +246,7 @@ class AuditReader
                 // Support for single table inheritance sub-classes
                 $allDiscrValues = array_flip($class->discriminatorMap);
 
-                $queriedDiscrValues = array($connection->quote($class->discriminatorValue));
+                $queriedDiscrValues = [$connection->quote($class->discriminatorValue)];
                 foreach ($class->subClasses as $subclassName) {
                     $queriedDiscrValues[] = $connection->quote($allDiscrValues[$subclassName]);
                 }
@@ -259,7 +259,7 @@ class AuditReader
             }
         }
 
-        $queryBuilder->setParameters(array_merge(array($revision), array_values($id)));
+        $queryBuilder->setParameters(array_merge([$revision], array_values($id)));
         $queryBuilder->orderBy('e.'.$this->config->getRevisionFieldName(), 'DESC');
 
         $row = $queryBuilder->execute()->fetch(\PDO::FETCH_ASSOC);
@@ -296,8 +296,8 @@ class AuditReader
             ->execute()
             ->fetchAll();
 
-        $revisions = array();
-        foreach ($revisionsData AS $row) {
+        $revisions = [];
+        foreach ($revisionsData as $row) {
             $revisions[] = $this->createRevision($row);
         }
 
@@ -316,8 +316,8 @@ class AuditReader
         $auditedEntities = $this->metadataFactory->getAllClassNames();
         $connection = $this->getConnection();
 
-        $changedEntities = array();
-        foreach ($auditedEntities AS $className) {
+        $changedEntities = [];
+        foreach ($auditedEntities as $className) {
             /** @var ClassMetadataInfo|ClassMetadata $class */
             $class = $this->em->getClassMetadata($className);
 
@@ -335,7 +335,7 @@ class AuditReader
                 $queryBuilder->createPositionalParameter($revision)
             ));
 
-            $columnMap = array();
+            $columnMap = [];
 
             foreach ($class->fieldNames as $columnName => $field) {
                 $tableAlias = $class->isInheritanceTypeJoined() && $class->isInheritedField($field) && ! $class->isIdentifier($field)
@@ -357,7 +357,7 @@ class AuditReader
                 $columnMap[$field] = $this->platform->getSQLResultCasing($columnName);
             }
 
-            foreach ($class->associationMappings AS $assoc) {
+            foreach ($class->associationMappings as $assoc) {
                 if (($assoc['type'] & ClassMetadata::TO_ONE) > 0 && $assoc['isOwningSide']) {
                     foreach ($assoc['targetToSourceKeyColumns'] as $sourceCol) {
                         $queryBuilder->addSelect($sourceCol);
@@ -389,9 +389,9 @@ class AuditReader
 
             $revisionsData = $queryBuilder->execute()->fetchAll();
 
-            foreach ($revisionsData AS $row) {
-                $id = array();
-                foreach ($class->identifier AS $idField) {
+            foreach ($revisionsData as $row) {
+                $id = [];
+                foreach ($class->identifier as $idField) {
                     $id[$idField] = $row[$idField];
                 }
 
@@ -465,11 +465,11 @@ class AuditReader
             ->orderBy('r.id', 'DESC');
 
         if (! is_array($id)) {
-            $id = array($class->identifier[0] => $id);
+            $id = [$class->identifier[0] => $id];
         }
         $queryBuilder->setParameters(array_values($id));
 
-        foreach ($class->identifier AS $idField) {
+        foreach ($class->identifier as $idField) {
             if (isset($class->fieldMappings[$idField])) {
                 $queryBuilder->andWhere(sprintf(
                     'e.%s = ?',
@@ -485,8 +485,8 @@ class AuditReader
 
         $revisionsData = $queryBuilder->execute()->fetchAll();
 
-        $revisions = array();
-        foreach ($revisionsData AS $row) {
+        $revisions = [];
+        foreach ($revisionsData as $row) {
             $revisions[] = $this->createRevision($row);
         }
 
@@ -517,11 +517,11 @@ class AuditReader
             ->orderBy('e.' . $this->config->getRevisionFieldName(), 'DESC');
 
         if (! is_array($id)) {
-            $id = array($class->identifier[0] => $id);
+            $id = [$class->identifier[0] => $id];
         }
         $queryBuilder->setParameters(array_values($id));
 
-        foreach ($class->identifier AS $idField) {
+        foreach ($class->identifier as $idField) {
             if (isset($class->fieldMappings[$idField])) {
                 $queryBuilder->andWhere(sprintf('e.%s = ?', $class->fieldMappings[$idField]['columnName']));
             } elseif (isset($class->associationMappings[$idField])) {
@@ -559,7 +559,7 @@ class AuditReader
         $oldValues = $this->getEntityValues($className, $oldObject);
         $newValues = $this->getEntityValues($className, $newObject);
 
-        $diff = array();
+        $diff = [];
 
         $metadataFactory = $this->em->getMetadataFactory();
         $valueToCompare = function ($value) use ($metadataFactory) {
@@ -578,9 +578,9 @@ class AuditReader
             $new = array_key_exists($field, $newValues) ? $newValues[$field] : null;
 
             if ($valueToCompare($old) == $valueToCompare($new)) {
-                $row = array('old' => '', 'new' => '', 'same' => $old);
+                $row = ['old' => '', 'new' => '', 'same' => $old];
             } else {
-                $row = array('old' => $old, 'new' => $new, 'same' => '');
+                $row = ['old' => $old, 'new' => $new, 'same' => ''];
             }
 
             $diff[$field] = $row;
@@ -602,7 +602,7 @@ class AuditReader
         /** @var ClassMetadataInfo|ClassMetadata $metadata */
         $metadata = $this->em->getClassMetadata($className);
 
-        $values = array();
+        $values = [];
 
         // Fetch simple fields values
         foreach ($metadata->getFieldNames() as $fieldName) {
@@ -644,11 +644,11 @@ class AuditReader
             ->orderBy('e.'.$this->config->getRevisionFieldName(), 'DESC');
 
         if (! is_array($id)) {
-            $id = array($class->identifier[0] => $id);
+            $id = [$class->identifier[0] => $id];
         }
         $queryBuilder->setParameters(array_values($id));
 
-        foreach ($class->identifier AS $idField) {
+        foreach ($class->identifier as $idField) {
             if (isset($class->fieldMappings[$idField])) {
                 $queryBuilder->andWhere($class->fieldMappings[$idField]['columnName'] . ' = ?');
             } elseif (isset($class->associationMappings[$idField])) {
@@ -656,7 +656,7 @@ class AuditReader
             }
         }
 
-        $columnMap = array();
+        $columnMap = [];
 
         foreach ($class->fieldNames as $columnName => $field) {
             $queryBuilder->addSelect(sprintf(
@@ -667,7 +667,7 @@ class AuditReader
             $columnMap[$field] = $this->platform->getSQLResultCasing($columnName);
         }
 
-        foreach ($class->associationMappings AS $assoc) {
+        foreach ($class->associationMappings as $assoc) {
             if (($assoc['type'] & ClassMetadata::TO_ONE) == 0 || ! $assoc['isOwningSide']) {
                 continue;
             }
@@ -680,7 +680,7 @@ class AuditReader
 
         $stmt = $queryBuilder->execute();
 
-        $result = array();
+        $result = [];
         while ($row = $stmt->fetch(Query::HYDRATE_ARRAY)) {
             $rev = $row[$revisionFieldName];
             unset($row[$revisionFieldName]);

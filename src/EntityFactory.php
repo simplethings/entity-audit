@@ -106,7 +106,7 @@ final class EntityFactory
                 $entity = $this->em->getClassMetadata($classMetadata->discriminatorMap[$discriminator])->newInstance();
             } else {
                 //a complex case when ToOne binding is against AbstractEntity having no discriminator
-                $pk = array();
+                $pk = [];
 
                 foreach ($classMetadata->identifier as $field) {
                     $pk[$classMetadata->getColumnName($field)] = $data[$field];
@@ -143,9 +143,9 @@ final class EntityFactory
 
                 if ($isAudited && $options[AuditReader::LOAD_AUDITED_ENTITIES]) {
                     // Primary Key. Used for audit tables queries.
-                    $pk = array();
+                    $pk = [];
                     // Primary Field. Used when fallback to Doctrine finder.
-                    $pf = array();
+                    $pf = [];
 
                     if ($assoc['isOwningSide']) {
                         foreach ($assoc['targetToSourceKeyColumns'] as $foreign => $local) {
@@ -177,7 +177,7 @@ final class EntityFactory
                     }
                 } elseif (! $isAudited && $options[AuditReader::LOAD_NATIVE_ENTITIES]) {
                     if ($assoc['isOwningSide']) {
-                        $associatedId = array();
+                        $associatedId = [];
                         foreach ($assoc['targetToSourceKeyColumns'] as $targetColumn => $srcColumn) {
                             $joinColumnValue = isset($data[$columnMap[$srcColumn]]) ? $data[$columnMap[$srcColumn]] : null;
                             if ($joinColumnValue !== null) {
@@ -200,7 +200,7 @@ final class EntityFactory
                 $collection = new ArrayCollection();
 
                 if ($isAudited && $options[AuditReader::LOAD_AUDITED_COLLECTIONS]) {
-                    $foreignKeys = array();
+                    $foreignKeys = [];
                     foreach ($targetClass->associationMappings[$assoc['mappedBy']]['sourceToTargetKeyColumns'] as $local => $foreign) {
                         $field = $classMetadata->getFieldForColumn($foreign);
                         $foreignKeys[$local] = $classMetadata->reflFields[$field]->getValue($entity);
@@ -257,7 +257,7 @@ final class EntityFactory
      */
     private function createEntityCacheKey(ClassMetadata $classMetadata, array $data, $revision)
     {
-        $keyParts = array();
+        $keyParts = [];
 
         foreach ($classMetadata->getIdentifierFieldNames() as $name) {
             if ($classMetadata->hasAssociation($name)) {
