@@ -23,7 +23,6 @@
 
 namespace SimpleThings\EntityAudit;
 
-use Doctrine\Common\Util\ClassUtils;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Platforms\AbstractPlatform;
 use Doctrine\DBAL\Query\QueryBuilder;
@@ -102,6 +101,7 @@ class AuditReader
         $this->platform = $this->em->getConnection()->getDatabasePlatform();
         $this->quoteStrategy = $this->em->getConfiguration()->getQuoteStrategy();
 
+        $this->comperator = new EntityComparator($factory, $em);
         $this->entityFactory = new EntityFactory($this, $em, $factory, $options);
     }
 
@@ -155,8 +155,15 @@ class AuditReader
         $connection = $this->getConnection();
 
         $queryBuilder = $connection->createQueryBuilder();
+
+        // revision table
+
+        $queryBuilder->addSelect('e.'.$this->config->getRevisionTypeFieldName());
         $queryBuilder->from($tableName = $this->config->getTableName($class), 'e');
         $queryBuilder->where(sprintf('e.%s <= ?', $this->config->getRevisionFieldName()));
+        $queryBuilder->orderBy('e.'.$this->config->getRevisionFieldName(), 'DESC');
+
+        // find by id
 
         foreach ($class->identifier as $idField) {
             if (is_array($id) && count($id) > 0) {
@@ -177,10 +184,14 @@ class AuditReader
             $id = [$class->identifier[0] => $id];
         }
 
-        $queryBuilder->addSelect('e.'.$this->config->getRevisionTypeFieldName());
+        $queryBuilder->setParameters(array_merge([$revision], array_values($id)));
+
+        // select entity fields
 
         $columnMap = $this->createColumnMap($class);
         $this->prepareSelects($queryBuilder, $class);
+
+        // association
 
         foreach ($class->associationMappings as $assoc) {
             if (($assoc['type'] & ClassMetadata::TO_ONE) == 0 || !$assoc['isOwningSide']) {
@@ -199,6 +210,8 @@ class AuditReader
             }
         }
 
+        // inheritance joined
+
         if ($class->isInheritanceTypeJoined() && $class->name != $class->rootEntityName) {
             $rootClass = $this->em->getClassMetadata($class->rootEntityName);
             $rootTableName = $this->config->getTableName($rootClass);
@@ -210,6 +223,8 @@ class AuditReader
 
             $queryBuilder->innerJoin('e', $rootTableName, 're', implode(' AND ', $condition));
         }
+
+        // inheritance single
 
         if (!$class->isInheritanceTypeNone()) {
             $queryBuilder->addSelect($class->discriminatorColumn['name']);
@@ -233,10 +248,12 @@ class AuditReader
             }
         }
 
-        $queryBuilder->setParameters(array_merge([$revision], array_values($id)));
-        $queryBuilder->orderBy('e.'.$this->config->getRevisionFieldName(), 'DESC');
+        // fetch data
 
         $row = $queryBuilder->execute()->fetch(\PDO::FETCH_ASSOC);
+
+
+        // error handling
 
         if (!$row) {
             throw new NoRevisionFoundException($class->name, $id, $revision);
@@ -246,36 +263,11 @@ class AuditReader
             throw new DeletedException($class->name, $id, $revision);
         }
 
+        // create entit
+
         unset($row[$this->config->getRevisionTypeFieldName()]);
 
         return $this->entityFactory->createEntity($class->name, $columnMap, $row, $revision, $options);
-    }
-
-    /**
-     * Return a list of all revisions.
-     *
-     * @param int $limit
-     * @param int $offset
-     *
-     * @return Revision[]
-     */
-    public function findRevisionHistory(int $limit = 20, int $offset = 0): array
-    {
-        $revisionsData = $this->getConnection()->createQueryBuilder()
-            ->select('*')
-            ->from($this->config->getRevisionTableName())
-            ->orderBy('id', 'DESC')
-            ->setFirstResult($offset)
-            ->setMaxResults($limit)
-            ->execute()
-            ->fetchAll();
-
-        $revisions = [];
-        foreach ($revisionsData as $row) {
-            $revisions[] = $this->createRevision($row);
-        }
-
-        return $revisions;
     }
 
     /**
@@ -363,6 +355,33 @@ class AuditReader
         }
 
         return $changedEntities;
+    }
+
+    /**
+     * Return a list of all revisions.
+     *
+     * @param int $limit
+     * @param int $offset
+     *
+     * @return Revision[]
+     */
+    public function findRevisionHistory(int $limit = 20, int $offset = 0): array
+    {
+        $revisionsData = $this->getConnection()->createQueryBuilder()
+            ->select('*')
+            ->from($this->config->getRevisionTableName())
+            ->orderBy('id', 'DESC')
+            ->setFirstResult($offset)
+            ->setMaxResults($limit)
+            ->execute()
+            ->fetchAll();
+
+        $revisions = [];
+        foreach ($revisionsData as $row) {
+            $revisions[] = $this->createRevision($row);
+        }
+
+        return $revisions;
     }
 
     /**
@@ -480,41 +499,7 @@ class AuditReader
         $oldObject = $this->find($className, $id, $oldRevision);
         $newObject = $this->find($className, $id, $newRevision);
 
-        $metadata = $this->metadataFactory->getMetadataFor($className);
-
-        $oldValues = $metadata->getEntityValues($oldObject);
-        $newValues = $metadata->getEntityValues($newObject);
-
-        $keys = array_keys(array_merge($oldValues, $newValues));
-        $diff = [];
-
-        foreach ($keys as $field) {
-            $old = $oldValues[$field] ?? null;
-            $new = $newValues[$field] ?? null;
-
-            if ($this->getValueToCompare($old) === $this->getValueToCompare($new)) {
-                $row = ['old' => '', 'new' => '', 'same' => $old];
-            } else {
-                $row = ['old' => $old, 'new' => $new, 'same' => ''];
-            }
-
-            $diff[$field] = $row;
-        }
-
-        return $diff;
-    }
-
-    private function getValueToCompare($value)
-    {
-        $metadataFactory = $this->em->getMetadataFactory();
-
-        // If the value is an associated entity, we have to compare the identifiers.
-        if (is_object($value) && $metadataFactory->hasMetadataFor(ClassUtils::getClass($value))) {
-            return $metadataFactory->getMetadataFor(ClassUtils::getClass($value))
-                ->getIdentifierValues($value);
-        }
-
-        return $value;
+        return $this->comperator->compare($oldObject, $newObject);
     }
 
     /**
