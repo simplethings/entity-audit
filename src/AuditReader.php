@@ -23,12 +23,12 @@
 
 namespace SimpleThings\EntityAudit;
 
-use Doctrine\Common\Util\ClassUtils;
+use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Platforms\AbstractPlatform;
+use Doctrine\DBAL\Query\QueryBuilder;
 use Doctrine\DBAL\Types\Type;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Mapping\ClassMetadata;
-use Doctrine\ORM\Mapping\ClassMetadataInfo;
 use Doctrine\ORM\Mapping\QuoteStrategy;
 use Doctrine\ORM\Query;
 use SimpleThings\EntityAudit\Exception\DeletedException;
@@ -89,12 +89,6 @@ class AuditReader
      */
     private $entityFactory;
 
-    /**
-     * @param EntityManagerInterface $em
-     * @param AuditConfiguration     $config
-     * @param MetadataFactory        $factory
-     * @param array                  $options
-     */
     public function __construct(
         EntityManagerInterface $em,
         AuditConfiguration $config,
@@ -107,22 +101,16 @@ class AuditReader
         $this->platform = $this->em->getConnection()->getDatabasePlatform();
         $this->quoteStrategy = $this->em->getConfiguration()->getQuoteStrategy();
 
+        $this->comperator = new EntityComparator($factory, $em);
         $this->entityFactory = new EntityFactory($this, $em, $factory, $options);
     }
 
-
-    /**
-     * @return \Doctrine\DBAL\Connection
-     */
-    public function getConnection()
+    public function getConnection(): Connection
     {
         return $this->em->getConnection();
     }
 
-    /**
-     * @return AuditConfiguration
-     */
-    public function getConfiguration()
+    public function getConfiguration(): AuditConfiguration
     {
         return $this->config;
     }
@@ -144,9 +132,9 @@ class AuditReader
      * $threatDeletionAsException to true.
      *
      * @param string $className
-     * @param mixed  $id
-     * @param int    $revision
-     * @param array  $options
+     * @param int|array $id
+     * @param int $revision
+     * @param array $options
      *
      * @return object
      *
@@ -155,21 +143,27 @@ class AuditReader
      * @throws NotAuditedException
      * @throws \Doctrine\DBAL\DBALException
      */
-    public function find($className, $id, $revision, array $options = [])
+    public function find(string $className, $id, int $revision, array $options = [])
     {
         $options = array_merge(['threatDeletionsAsExceptions' => false], $options);
 
-        if (! $this->metadataFactory->isAudited($className)) {
+        if (!$this->metadataFactory->isAudited($className)) {
             throw new NotAuditedException($className);
         }
 
-        /** @var ClassMetadataInfo|ClassMetadata $class */
         $class = $this->em->getClassMetadata($className);
         $connection = $this->getConnection();
 
         $queryBuilder = $connection->createQueryBuilder();
+
+        // revision table
+
+        $queryBuilder->addSelect('e.'.$this->config->getRevisionTypeFieldName());
         $queryBuilder->from($tableName = $this->config->getTableName($class), 'e');
         $queryBuilder->where(sprintf('e.%s <= ?', $this->config->getRevisionFieldName()));
+        $queryBuilder->orderBy('e.'.$this->config->getRevisionFieldName(), 'DESC');
+
+        // find by id
 
         foreach ($class->identifier as $idField) {
             if (is_array($id) && count($id) > 0) {
@@ -180,54 +174,45 @@ class AuditReader
             } elseif (isset($class->associationMappings[$idField])) {
                 $columnName = $class->associationMappings[$idField]['joinColumns'][0]['name'];
             } else {
-                throw new \RuntimeException('column name not found  for' . $idField);
+                throw new \RuntimeException('column name not found  for'.$idField);
             }
 
             $queryBuilder->andWhere(sprintf('e.%s = ?', $columnName));
         }
 
-        if (! is_array($id)) {
+        if (!is_array($id)) {
             $id = [$class->identifier[0] => $id];
         }
 
-        $queryBuilder->addSelect('e.' . $this->config->getRevisionTypeFieldName());
-        $columnMap = [];
+        $queryBuilder->setParameters(array_merge([$revision], array_values($id)));
 
-        foreach ($class->fieldNames as $columnName => $field) {
-            $tableAlias = $class->isInheritanceTypeJoined() && $class->isInheritedField($field) && ! $class->isIdentifier($field)
-                ? 're' // root entity
-                : 'e';
+        // select entity fields
 
-            $type = Type::getType($class->fieldMappings[$field]['type']);
-            $queryBuilder->addSelect(sprintf(
-                '%s AS %s',
-                $type->convertToPHPValueSQL(
-                    $tableAlias . '.' . $this->quoteStrategy->getColumnName($field, $class, $this->platform),
-                    $this->platform
-                ),
-                $this->platform->quoteSingleIdentifier($field)
-            ));
-            $columnMap[$field] = $this->platform->getSQLResultCasing($columnName);
-        }
+        $columnMap = $this->createColumnMap($class);
+        $this->prepareSelects($queryBuilder, $class);
+
+        // association
 
         foreach ($class->associationMappings as $assoc) {
-            if (($assoc['type'] & ClassMetadata::TO_ONE) == 0 || ! $assoc['isOwningSide']) {
+            if (($assoc['type'] & ClassMetadata::TO_ONE) == 0 || !$assoc['isOwningSide']) {
                 continue;
             }
 
             foreach ($assoc['joinColumnFieldNames'] as $sourceCol) {
-                $tableAlias = $class->isInheritanceTypeJoined() &&
-                $class->isInheritedAssociation($assoc['fieldName']) &&
-                ! $class->isIdentifier($assoc['fieldName'])
+                $tableAlias = $class->isInheritanceTypeJoined()
+                && $class->isInheritedAssociation($assoc['fieldName'])
+                && !$class->isIdentifier($assoc['fieldName'])
                     ? 're' // root entity
                     : 'e';
-                $queryBuilder->addSelect($tableAlias . '.' . $sourceCol);
+
+                $queryBuilder->addSelect($tableAlias.'.'.$sourceCol);
                 $columnMap[$sourceCol] = $this->platform->getSQLResultCasing($sourceCol);
             }
         }
 
+        // inheritance joined
+
         if ($class->isInheritanceTypeJoined() && $class->name != $class->rootEntityName) {
-            /** @var ClassMetadataInfo|ClassMetadata $rootClass */
             $rootClass = $this->em->getClassMetadata($class->rootEntityName);
             $rootTableName = $this->config->getTableName($rootClass);
 
@@ -239,7 +224,9 @@ class AuditReader
             $queryBuilder->innerJoin('e', $rootTableName, 're', implode(' AND ', $condition));
         }
 
-        if (! $class->isInheritanceTypeNone()) {
+        // inheritance single
+
+        if (!$class->isInheritanceTypeNone()) {
             $queryBuilder->addSelect($class->discriminatorColumn['name']);
 
             if ($class->isInheritanceTypeSingleTable() && $class->discriminatorValue !== null) {
@@ -251,20 +238,24 @@ class AuditReader
                     $queriedDiscrValues[] = $connection->quote($allDiscrValues[$subclassName]);
                 }
 
-                $queryBuilder->andWhere(sprintf(
-                    '%s IN (%s)',
-                    $class->discriminatorColumn['name'],
-                    implode(', ', $queriedDiscrValues)
-                ));
+                $queryBuilder->andWhere(
+                    sprintf(
+                        '%s IN (%s)',
+                        $class->discriminatorColumn['name'],
+                        implode(', ', $queriedDiscrValues)
+                    )
+                );
             }
         }
 
-        $queryBuilder->setParameters(array_merge([$revision], array_values($id)));
-        $queryBuilder->orderBy('e.'.$this->config->getRevisionFieldName(), 'DESC');
+        // fetch data
 
         $row = $queryBuilder->execute()->fetch(\PDO::FETCH_ASSOC);
 
-        if (! $row) {
+
+        // error handling
+
+        if (!$row) {
             throw new NoRevisionFoundException($class->name, $id, $revision);
         }
 
@@ -272,36 +263,11 @@ class AuditReader
             throw new DeletedException($class->name, $id, $revision);
         }
 
+        // create entit
+
         unset($row[$this->config->getRevisionTypeFieldName()]);
 
         return $this->entityFactory->createEntity($class->name, $columnMap, $row, $revision, $options);
-    }
-
-    /**
-     * Return a list of all revisions.
-     *
-     * @param int $limit
-     * @param int $offset
-     *
-     * @return Revision[]
-     */
-    public function findRevisionHistory($limit = 20, $offset = 0)
-    {
-        $revisionsData = $this->getConnection()->createQueryBuilder()
-            ->select('*')
-            ->from($this->config->getRevisionTableName())
-            ->orderBy('id', 'DESC')
-            ->setFirstResult($offset)
-            ->setMaxResults($limit)
-            ->execute()
-            ->fetchAll();
-
-        $revisions = [];
-        foreach ($revisionsData as $row) {
-            $revisions[] = $this->createRevision($row);
-        }
-
-        return $revisions;
     }
 
     /**
@@ -311,14 +277,13 @@ class AuditReader
      *
      * @return ChangedEntity[]
      */
-    public function findEntitiesChangedAtRevision($revision)
+    public function findEntitiesChangedAtRevision(int $revision): array
     {
         $auditedEntities = $this->metadataFactory->getAllClassNames();
         $connection = $this->getConnection();
 
         $changedEntities = [];
         foreach ($auditedEntities as $className) {
-            /** @var ClassMetadataInfo|ClassMetadata $class */
             $class = $this->em->getClassMetadata($className);
 
             if ($class->isInheritanceTypeSingleTable() && count($class->subClasses) > 0) {
@@ -326,36 +291,19 @@ class AuditReader
             }
 
             $queryBuilder = $connection->createQueryBuilder()
-                ->select('e.' . $this->config->getRevisionTypeFieldName())
+                ->select('e.'.$this->config->getRevisionTypeFieldName())
                 ->from($this->config->getTableName($class), 'e');
 
-            $queryBuilder->where(sprintf(
-                'e.%s = %s',
-                $this->config->getRevisionFieldName(),
-                $queryBuilder->createPositionalParameter($revision)
-            ));
+            $queryBuilder->where(
+                sprintf(
+                    'e.%s = %s',
+                    $this->config->getRevisionFieldName(),
+                    $queryBuilder->createPositionalParameter($revision)
+                )
+            );
 
-            $columnMap = [];
-
-            foreach ($class->fieldNames as $columnName => $field) {
-                $tableAlias = $class->isInheritanceTypeJoined() && $class->isInheritedField($field) && ! $class->isIdentifier($field)
-                    ? 're' // root entity
-                    : 'e';
-
-                $type = Type::getType($class->fieldMappings[$field]['type']);
-
-                $queryBuilder->addSelect(sprintf(
-                    '%s AS %s',
-                    $type->convertToPHPValueSQL(
-                        $tableAlias . '.' . $this->quoteStrategy->getColumnName($field, $class, $this->platform),
-                        $this->platform
-                    ),
-                    $this->platform->quoteSingleIdentifier($field)
-                ));
-
-
-                $columnMap[$field] = $this->platform->getSQLResultCasing($columnName);
-            }
+            $columnMap = $this->createColumnMap($class);
+            $this->prepareSelects($queryBuilder, $class);
 
             foreach ($class->associationMappings as $assoc) {
                 if (($assoc['type'] & ClassMetadata::TO_ONE) > 0 && $assoc['isOwningSide']) {
@@ -367,14 +315,15 @@ class AuditReader
             }
 
             if ($class->isInheritanceTypeSingleTable()) {
-                $queryBuilder->addSelect('e.' . $class->discriminatorColumn['name']);
-                $queryBuilder->andWhere(sprintf(
-                    'e.%s = %s',
-                    $class->discriminatorColumn['fieldName'],
-                    $queryBuilder->createPositionalParameter($class->discriminatorValue)
-                ));
+                $queryBuilder->addSelect('e.'.$class->discriminatorColumn['name']);
+                $queryBuilder->andWhere(
+                    sprintf(
+                        'e.%s = %s',
+                        $class->discriminatorColumn['fieldName'],
+                        $queryBuilder->createPositionalParameter($class->discriminatorValue)
+                    )
+                );
             } elseif ($class->isInheritanceTypeJoined() && $class->name !== $class->rootEntityName) {
-                /** @var ClassMetadataInfo|ClassMetadata $rootClass */
                 $rootClass = $this->em->getClassMetadata($class->rootEntityName);
                 $rootTableName = $this->config->getTableName($rootClass);
 
@@ -383,7 +332,7 @@ class AuditReader
                     $condition[] = "re.$name = e.$name";
                 }
 
-                $queryBuilder->addSelect('re.' . $class->discriminatorColumn['name']);
+                $queryBuilder->addSelect('re.'.$class->discriminatorColumn['name']);
                 $queryBuilder->innerJoin('e', $rootTableName, 're', implode(' AND ', $condition));
             }
 
@@ -409,6 +358,33 @@ class AuditReader
     }
 
     /**
+     * Return a list of all revisions.
+     *
+     * @param int $limit
+     * @param int $offset
+     *
+     * @return Revision[]
+     */
+    public function findRevisionHistory(int $limit = 20, int $offset = 0): array
+    {
+        $revisionsData = $this->getConnection()->createQueryBuilder()
+            ->select('*')
+            ->from($this->config->getRevisionTableName())
+            ->orderBy('id', 'DESC')
+            ->setFirstResult($offset)
+            ->setMaxResults($limit)
+            ->execute()
+            ->fetchAll();
+
+        $revisions = [];
+        foreach ($revisionsData as $row) {
+            $revisions[] = $this->createRevision($row);
+        }
+
+        return $revisions;
+    }
+
+    /**
      * Return the revision object for a particular revision.
      *
      * @param  int $rev
@@ -417,7 +393,7 @@ class AuditReader
      *
      * @throws InvalidRevisionException
      */
-    public function findRevision($rev)
+    public function findRevision(int $rev): Revision
     {
         $revisionsData = $this->getConnection()->createQueryBuilder()
             ->select('*')
@@ -438,18 +414,17 @@ class AuditReader
      * Find all revisions that were made of entity class with given id.
      *
      * @param string $className
-     * @param mixed  $id
+     * @param int|array $id
      *
      * @throws NotAuditedException
      * @return Revision[]
      */
-    public function findRevisions($className, $id)
+    public function findRevisions(string $className, $id): array
     {
-        if (! $this->metadataFactory->isAudited($className)) {
+        if (!$this->metadataFactory->isAudited($className)) {
             throw new NotAuditedException($className);
         }
 
-        /** @var ClassMetadataInfo|ClassMetadata $class */
         $class = $this->em->getClassMetadata($className);
 
         $connection = $this->getConnection();
@@ -460,28 +435,11 @@ class AuditReader
                 'r',
                 $this->config->getTableName($class),
                 'e',
-                'r.id = e.' . $this->config->getRevisionFieldName()
+                'r.id = e.'.$this->config->getRevisionFieldName()
             )
             ->orderBy('r.id', 'DESC');
 
-        if (! is_array($id)) {
-            $id = [$class->identifier[0] => $id];
-        }
-        $queryBuilder->setParameters(array_values($id));
-
-        foreach ($class->identifier as $idField) {
-            if (isset($class->fieldMappings[$idField])) {
-                $queryBuilder->andWhere(sprintf(
-                    'e.%s = ?',
-                    $class->fieldMappings[$idField]['columnName']
-                ));
-            } elseif (isset($class->associationMappings[$idField])) {
-                $queryBuilder->andWhere(sprintf(
-                    'e.%s = ?',
-                    $class->associationMappings[$idField]['joinColumns'][0]['name']
-                ));
-            }
-        }
+        $this->prepareWhereStatement($id, $queryBuilder, $class);
 
         $revisionsData = $queryBuilder->execute()->fetchAll();
 
@@ -497,42 +455,27 @@ class AuditReader
      * Gets the current revision of the entity with given ID.
      *
      * @param string $className
-     * @param mixed  $id
+     * @param int|array $id
      *
      * @throws NotAuditedException
-     * @return integer
+     * @return int
      */
-    public function getCurrentRevision($className, $id)
+    public function getCurrentRevision(string $className, $id): int
     {
-        if (! $this->metadataFactory->isAudited($className)) {
+        if (!$this->metadataFactory->isAudited($className)) {
             throw new NotAuditedException($className);
         }
 
-        /** @var ClassMetadataInfo|ClassMetadata $class */
         $class = $this->em->getClassMetadata($className);
 
         $queryBuilder = $this->getConnection()->createQueryBuilder()
-            ->select('e.' . $this->config->getRevisionFieldName())
+            ->select('e.'.$this->config->getRevisionFieldName())
             ->from($this->config->getTableName($class), 'e')
-            ->orderBy('e.' . $this->config->getRevisionFieldName(), 'DESC');
+            ->orderBy('e.'.$this->config->getRevisionFieldName(), 'DESC');
 
-        if (! is_array($id)) {
-            $id = [$class->identifier[0] => $id];
-        }
-        $queryBuilder->setParameters(array_values($id));
+        $this->prepareWhereStatement($id, $queryBuilder, $class);
 
-        foreach ($class->identifier as $idField) {
-            if (isset($class->fieldMappings[$idField])) {
-                $queryBuilder->andWhere(sprintf('e.%s = ?', $class->fieldMappings[$idField]['columnName']));
-            } elseif (isset($class->associationMappings[$idField])) {
-                $queryBuilder->andWhere(sprintf(
-                    'e.%s = ?',
-                    $class->associationMappings[$idField]['joinColumns'][0]['name']
-                ));
-            }
-        }
-
-        return $queryBuilder->execute()->fetchColumn();
+        return (int)$queryBuilder->execute()->fetchColumn();
     }
 
     /**
@@ -540,9 +483,9 @@ class AuditReader
      * an object with a given id.
      *
      * @param string $className
-     * @param int    $id
-     * @param int    $oldRevision
-     * @param int    $newRevision
+     * @param int|array $id
+     * @param int $oldRevision
+     * @param int $newRevision
      *
      * @return array
      *
@@ -551,90 +494,28 @@ class AuditReader
      * @throws \SimpleThings\EntityAudit\Exception\NoRevisionFoundException
      * @throws \SimpleThings\EntityAudit\Exception\DeletedException
      */
-    public function diff($className, $id, $oldRevision, $newRevision)
+    public function diff(string $className, $id, int $oldRevision, int $newRevision): array
     {
         $oldObject = $this->find($className, $id, $oldRevision);
         $newObject = $this->find($className, $id, $newRevision);
 
-        $oldValues = $this->getEntityValues($className, $oldObject);
-        $newValues = $this->getEntityValues($className, $newObject);
-
-        $diff = [];
-
-        $metadataFactory = $this->em->getMetadataFactory();
-        $valueToCompare = function ($value) use ($metadataFactory) {
-            // If the value is an associated entity, we have to compare the identifiers.
-            if (is_object($value) && $metadataFactory->hasMetadataFor(ClassUtils::getClass($value))) {
-                return $metadataFactory->getMetadataFor(ClassUtils::getClass($value))
-                    ->getIdentifierValues($value);
-            }
-
-            return $value;
-        };
-
-        $keys = array_keys($oldValues + $newValues);
-        foreach ($keys as $field) {
-            $old = array_key_exists($field, $oldValues) ? $oldValues[$field] : null;
-            $new = array_key_exists($field, $newValues) ? $newValues[$field] : null;
-
-            if ($valueToCompare($old) == $valueToCompare($new)) {
-                $row = ['old' => '', 'new' => '', 'same' => $old];
-            } else {
-                $row = ['old' => $old, 'new' => $new, 'same' => ''];
-            }
-
-            $diff[$field] = $row;
-        }
-
-        return $diff;
-    }
-
-    /**
-     * Get the values for a specific entity as an associative array
-     *
-     * @param string $className
-     * @param object $entity
-     *
-     * @return array
-     */
-    public function getEntityValues($className, $entity)
-    {
-        /** @var ClassMetadataInfo|ClassMetadata $metadata */
-        $metadata = $this->em->getClassMetadata($className);
-
-        $values = [];
-
-        // Fetch simple fields values
-        foreach ($metadata->getFieldNames() as $fieldName) {
-            $values[$fieldName] = $metadata->getFieldValue($entity, $fieldName);
-        }
-
-        // Fetch associations identifiers values
-        foreach ($metadata->getAssociationNames() as $associationName) {
-            // Do not get OneToMany or ManyToMany collections because not relevant to the revision.
-            if ($metadata->getAssociationMapping($associationName)['isOwningSide']) {
-                $values[$associationName] = $metadata->getFieldValue($entity, $associationName);
-            }
-        }
-
-        return $values;
+        return $this->comperator->compare($oldObject, $newObject);
     }
 
     /**
      * @param string $className
-     * @param mixed  $id
+     * @param int|array $id
      *
      * @return array
      *
      * @throws NotAuditedException
      */
-    public function getEntityHistory($className, $id)
+    public function getEntityHistory(string $className, $id): array
     {
-        if (! $this->metadataFactory->isAudited($className)) {
+        if (!$this->metadataFactory->isAudited($className)) {
             throw new NotAuditedException($className);
         }
 
-        /** @var ClassMetadataInfo|ClassMetadata $class */
         $class = $this->em->getClassMetadata($className);
 
         $revisionFieldName = $this->config->getRevisionFieldName();
@@ -643,32 +524,23 @@ class AuditReader
             ->from($this->config->getTableName($class), 'e')
             ->orderBy('e.'.$this->config->getRevisionFieldName(), 'DESC');
 
-        if (! is_array($id)) {
-            $id = [$class->identifier[0] => $id];
-        }
-        $queryBuilder->setParameters(array_values($id));
-
-        foreach ($class->identifier as $idField) {
-            if (isset($class->fieldMappings[$idField])) {
-                $queryBuilder->andWhere($class->fieldMappings[$idField]['columnName'] . ' = ?');
-            } elseif (isset($class->associationMappings[$idField])) {
-                $queryBuilder->andWhere($class->associationMappings[$idField]['joinColumns'][0]['name'] . ' = ?');
-            }
-        }
+        $this->prepareWhereStatement($id, $queryBuilder, $class);
 
         $columnMap = [];
 
         foreach ($class->fieldNames as $columnName => $field) {
-            $queryBuilder->addSelect(sprintf(
-                '%s AS %s',
-                $this->quoteStrategy->getColumnName($field, $class, $this->platform),
-                $this->platform->quoteSingleIdentifier($field)
-            ));
+            $queryBuilder->addSelect(
+                sprintf(
+                    '%s AS %s',
+                    $this->quoteStrategy->getColumnName($field, $class, $this->platform),
+                    $this->platform->quoteSingleIdentifier($field)
+                )
+            );
             $columnMap[$field] = $this->platform->getSQLResultCasing($columnName);
         }
 
         foreach ($class->associationMappings as $assoc) {
-            if (($assoc['type'] & ClassMetadata::TO_ONE) == 0 || ! $assoc['isOwningSide']) {
+            if (($assoc['type'] & ClassMetadata::TO_ONE) == 0 || !$assoc['isOwningSide']) {
                 continue;
             }
 
@@ -691,12 +563,68 @@ class AuditReader
         return $result;
     }
 
-    /**
-     * @param array $row
-     *
-     * @return Revision
-     */
-    private function createRevision(array $row)
+    private function prepareWhereStatement($id, QueryBuilder $queryBuilder, ClassMetadata $class)
+    {
+        if (!is_array($id)) {
+            $id = [$class->identifier[0] => $id];
+        }
+
+        $queryBuilder->setParameters(array_values($id));
+
+        foreach ($class->identifier as $idField) {
+            if (isset($class->fieldMappings[$idField])) {
+                $queryBuilder->andWhere(sprintf('e.%s = ?', $class->fieldMappings[$idField]['columnName']));
+
+                continue;
+            }
+
+            if (isset($class->associationMappings[$idField])) {
+                $queryBuilder->andWhere(
+                    sprintf(
+                        'e.%s = ?',
+                        $class->associationMappings[$idField]['joinColumns'][0]['name']
+                    )
+                );
+            }
+        }
+    }
+
+    private function prepareSelects(QueryBuilder $queryBuilder, ClassMetadata $class)
+    {
+        foreach ($class->fieldNames as $columnName => $field) {
+            $tableAlias = $class->isInheritanceTypeJoined()
+            && $class->isInheritedField($field)
+            && !$class->isIdentifier($field)
+                ? 're' // root entity
+                : 'e';
+
+            $type = Type::getType($class->fieldMappings[$field]['type']);
+
+            $queryBuilder->addSelect(
+                sprintf(
+                    '%s AS %s',
+                    $type->convertToPHPValueSQL(
+                        $tableAlias.'.'.$this->quoteStrategy->getColumnName($field, $class, $this->platform),
+                        $this->platform
+                    ),
+                    $this->platform->quoteSingleIdentifier($field)
+                )
+            );
+        }
+    }
+
+    private function createColumnMap(ClassMetadata $class): array
+    {
+        $columnMap = [];
+
+        foreach ($class->fieldNames as $columnName => $field) {
+            $columnMap[$field] = $this->platform->getSQLResultCasing($columnName);
+        }
+
+        return $columnMap;
+    }
+
+    private function createRevision(array $row): Revision
     {
         return new Revision(
             $row['id'],

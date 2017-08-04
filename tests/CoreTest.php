@@ -93,7 +93,7 @@ class CoreTest extends BaseTest
         $this->em->persist($foxy);
         $this->em->flush();
 
-        $reader = $this->auditManager->createAuditReader($this->em);
+        $reader = $this->auditManager->createAuditReader();
         $auditUser = $reader->find(get_class($user), $user->getId(), 1);
 
         $this->assertInstanceOf(get_class($user), $auditUser, "Audited User is also a User instance.");
@@ -123,7 +123,7 @@ class CoreTest extends BaseTest
 
     public function testFindNoRevisionFound()
     {
-        $reader = $this->auditManager->createAuditReader($this->em);
+        $reader = $this->auditManager->createAuditReader();
 
         $this->setExpectedException(
             'SimpleThings\EntityAudit\Exception\NoRevisionFoundException',
@@ -134,7 +134,7 @@ class CoreTest extends BaseTest
 
     public function testFindNotAudited()
     {
-        $reader = $this->auditManager->createAuditReader($this->em);
+        $reader = $this->auditManager->createAuditReader();
 
         $this->setExpectedException(
             'SimpleThings\EntityAudit\Exception\NotAuditedException',
@@ -155,7 +155,7 @@ class CoreTest extends BaseTest
         $this->em->persist($article);
         $this->em->flush();
 
-        $reader = $this->auditManager->createAuditReader($this->em);
+        $reader = $this->auditManager->createAuditReader();
         $revisions = $reader->findRevisionHistory();
 
         $this->assertEquals(2, count($revisions));
@@ -231,7 +231,7 @@ class CoreTest extends BaseTest
         $this->em->persist($article);
         $this->em->flush();
 
-        $reader = $this->auditManager->createAuditReader($this->em);
+        $reader = $this->auditManager->createAuditReader();
 
         $this->assertSame('beberlei', $reader->find(get_class($article), 1, 1)->getAuthor()->getName());
     }
@@ -253,7 +253,7 @@ class CoreTest extends BaseTest
             ]
         );
 
-        $reader = $this->auditManager->createAuditReader($this->em);
+        $reader = $this->auditManager->createAuditReader();
 
         $this->assertSame('He is an amazing contributor!', $reader->find(get_class($user), 1, 1)->getProfile()->getBiography());
     }
@@ -278,7 +278,7 @@ class CoreTest extends BaseTest
         $user->setName("beberlei2");
         $this->em->flush();
 
-        $reader = $this->auditManager->createAuditReader($this->em);
+        $reader = $this->auditManager->createAuditReader();
         $revisions = $reader->findRevisions(get_class($user), $user->getId());
 
         $this->assertEquals(2, count($revisions));
@@ -310,7 +310,7 @@ class CoreTest extends BaseTest
         $user->setName("Rajesh");
         $this->em->flush();
 
-        $reader = $this->auditManager->createAuditReader($this->em);
+        $reader = $this->auditManager->createAuditReader();
 
         $revision = $reader->getCurrentRevision(get_class($user), $user->getId());
         $this->assertEquals(2, $revision);
@@ -362,7 +362,7 @@ class CoreTest extends BaseTest
         $this->em->remove($user);
         $this->em->flush();
 
-        $reader = $this->auditManager->createAuditReader($this->em);
+        $reader = $this->auditManager->createAuditReader();
         $changedEntities = $reader->findEntitiesChangedAtRevision(2);
 
         $this->assertEquals(1, count($changedEntities));
@@ -385,7 +385,7 @@ class CoreTest extends BaseTest
         $user->setName('b.eberlei');
         $this->em->flush();
 
-        $reader = $this->auditManager->createAuditReader($this->em);
+        $reader = $this->auditManager->createAuditReader();
         $revisions = $reader->findRevisionHistory();
 
         $this->assertEquals(2, count($revisions));

@@ -53,4 +53,33 @@ class ClassMetadata
         $this->entity = $classMetadataInfo;
         $this->name = $classMetadataInfo->name;
     }
+
+    /**
+     * Get the values for a specific entity as an associative array
+     *
+     * @param object $entity
+     *
+     * @return array
+     */
+    public function getEntityValues($entity): array
+    {
+        $metadata = $this->entity;
+
+        $values = [];
+
+        // Fetch simple fields values
+        foreach ($metadata->getFieldNames() as $fieldName) {
+            $values[$fieldName] = $metadata->getFieldValue($entity, $fieldName);
+        }
+
+        // Fetch associations identifiers values
+        foreach ($metadata->getAssociationNames() as $associationName) {
+            // Do not get OneToMany or ManyToMany collections because not relevant to the revision.
+            if ($metadata->getAssociationMapping($associationName)['isOwningSide']) {
+                $values[$associationName] = $metadata->getFieldValue($entity, $associationName);
+            }
+        }
+
+        return $values;
+    }
 }
